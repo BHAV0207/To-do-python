@@ -1,0 +1,15 @@
+# Virtual environment (Python equivalent of node_modules)
+venv/
+.env/
+.venv/
+env/
+
+# Cached dependencies
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+pip-wheel-metadata/
+*.egg-info/
+*.dist-info/
+poetry.lock
