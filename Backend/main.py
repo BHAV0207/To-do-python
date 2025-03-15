@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from routes import router
 from fastapi.middleware.cors import CORSMiddleware
 
-app=FastAPI(title="To-Do-List")
+app = FastAPI(title="FastAPI To-Do App")
 
+# Enable CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
