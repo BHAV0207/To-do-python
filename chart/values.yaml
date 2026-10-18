@@ -1,0 +1,5 @@
+image:
+  repository: ghcr.io/bhav0207/to-do-python
+  tag: latest
+replicas: 2
+monitoring: false
