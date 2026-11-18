@@ -1,0 +1,60 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+env:
+  IMAGE: ghcr.io/bhav0207/to-do-python
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r Backend/requirements.txt pytest httpx
+      - run: pytest
+        working-directory: Backend
+      - run: helm lint chart
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t "$IMAGE:${{ github.sha }}" Backend
+      - run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.0 image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 "$IMAGE:${{ github.sha }}"
+      - if: github.event_name == 'push'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push "$IMAGE:${{ github.sha }}"
+  deploy:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+      - run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull "$IMAGE:${{ github.sha }}"
+          kind load docker-image "$IMAGE:${{ github.sha }}" --name chart-testing
+      - run: |
+          P=$(openssl rand -hex 16)
+          kubectl create secret generic todo-secrets --from-literal=MONGO_INITDB_ROOT_USERNAME=todo --from-literal=MONGO_INITDB_ROOT_PASSWORD="$P" --from-literal=MONGO_URI="mongodb://todo:$P@mongo:27017/?authSource=admin"
+          helm upgrade --install todo chart --set image.tag=${{ github.sha }} --wait --rollback-on-failure --timeout 5m
+      - run: |
+          kubectl port-forward svc/todo 8080:80 &
+          sleep 3
+          curl -sf localhost:8080/healthz | grep ${{ github.sha }}
+          curl -sf -X POST localhost:8080/todos -H 'content-type: application/json' -d '{"title":"smoke"}'
+          curl -sf localhost:8080/todos | grep smoke

@@ -1,0 +1,32 @@
+{{- if .Values.monitoring }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: todo
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: todo
+  endpoints:
+    - port: http
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: todo
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: todo
+      rules:
+        - alert: TodoHighErrorRate
+          expr: sum(rate(http_requests_total{job="todo",handler=~"/todos.*",status="5xx"}[5m])) / sum(rate(http_requests_total{job="todo",handler=~"/todos.*"}[5m])) > 0.01
+          for: 5m
+        - alert: TodoHighLatency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="todo",handler=~"/todos.*"}[5m])) by (le)) > 0.5
+          for: 5m
+{{- end }}
